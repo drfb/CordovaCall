@@ -81,6 +81,7 @@ public class CordovaCall extends CordovaPlugin {
         callbackContextMap.put("hangup",new ArrayList<CallbackContext>());
         callbackContextMap.put("sendCall",new ArrayList<CallbackContext>());
         callbackContextMap.put("receiveCall",new ArrayList<CallbackContext>());
+        callbackContextMap.put("DTMF",new ArrayList<CallbackContext>());
     }
 
     @Override

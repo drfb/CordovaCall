@@ -2,7 +2,10 @@ package com.dmarc.cordovacall;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.PluginResult;
+import org.json.JSONObject;
+import org.json.JSONException;
 import android.content.Intent;
+import android.content.Context;
 import android.graphics.drawable.Icon;
 import android.os.Bundle;
 import android.telecom.Connection;
@@ -16,6 +19,7 @@ import android.os.Handler;
 import android.net.Uri;
 import java.util.ArrayList;
 import android.util.Log;
+import android.widget.Toast;
 
 public class MyConnectionService extends ConnectionService {
 
@@ -28,6 +32,22 @@ public class MyConnectionService extends ConnectionService {
 
     public static void deinitConnection() {
         conn = null;
+    }
+
+    public static void notifyCordovaCall(String handler, PluginResult result) {
+        ArrayList<CallbackContext> callbackContexts = CordovaCall.getCallbackContexts().get(handler);
+        if (callbackContexts == null) {
+            return;
+        }
+
+        for (final CallbackContext callbackContext : callbackContexts) {
+            CordovaCall.getCordova().getThreadPool().execute(new Runnable() {
+                public void run() {
+                    result.setKeepCallback(true);
+                    callbackContext.sendPluginResult(result);
+                }
+            });
+        }
     }
 
     @Override
@@ -75,6 +95,13 @@ public class MyConnectionService extends ConnectionService {
             }
 
             @Override
+            public void onPlayDtmfTone(char c) {
+                super.onPlayDtmfTone(c);
+
+                MyConnectionService.notifyCordovaCall("DTMF", new PluginResult(PluginResult.Status.OK, String.valueOf(c)));
+            }
+
+            @Override
             public void onDisconnect() {
                 DisconnectCause cause = new DisconnectCause(DisconnectCause.LOCAL);
                 this.setDisconnected(cause);
@@ -114,6 +141,13 @@ public class MyConnectionService extends ConnectionService {
 
     @Override
     public Connection onCreateOutgoingConnection(PhoneAccountHandle connectionManagerPhoneAccount, ConnectionRequest request) {
+        final Context context = this.getApplicationContext();
+
+        if (conn != null) {
+            Toast.makeText(context, "You can't make a call right now because you're already in a call", Toast.LENGTH_SHORT).show();
+            return null;
+        }
+
         final Connection connection = new Connection() {
             @Override
             public void onAnswer() {
@@ -131,12 +165,23 @@ public class MyConnectionService extends ConnectionService {
             }
 
             @Override
+            public void onPlayDtmfTone(char c) {
+                super.onPlayDtmfTone(c);
+
+                MyConnectionService.notifyCordovaCall("DTMF", new PluginResult(PluginResult.Status.OK, String.valueOf(c)));
+            }
+
+            @Override
             public void onDisconnect() {
                 DisconnectCause cause = new DisconnectCause(DisconnectCause.LOCAL);
                 this.setDisconnected(cause);
                 this.destroy();
                 conn = null;
                 ArrayList<CallbackContext> callbackContexts = CordovaCall.getCallbackContexts().get("hangup");
+                if (callbackContexts == null) {
+                    return;
+                }
+
                 for (final CallbackContext callbackContext : callbackContexts) {
                     CordovaCall.getCordova().getThreadPool().execute(new Runnable() {
                         public void run() {
@@ -151,10 +196,17 @@ public class MyConnectionService extends ConnectionService {
             @Override
             public void onStateChanged(int state) {
               if(state == Connection.STATE_DIALING) {
+                final Connection self = this;
                 final Handler handler = new Handler();
                 handler.postDelayed(new Runnable() {
                     @Override
                     public void run() {
+                        if (CordovaCall.getCordova() == null) {
+                            Toast.makeText(context, "Please open VoIPstudio first", Toast.LENGTH_SHORT).show();
+                            self.onDisconnect();
+                            return;
+                        }
+
                         Intent intent = new Intent(CordovaCall.getCordova().getActivity().getApplicationContext(), CordovaCall.getCordova().getActivity().getClass());
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP);
                         CordovaCall.getCordova().getActivity().getApplicationContext().startActivity(intent);
@@ -163,7 +215,8 @@ public class MyConnectionService extends ConnectionService {
               }
             }
         };
-        connection.setAddress(Uri.parse(request.getExtras().getString("to")), TelecomManager.PRESENTATION_ALLOWED);
+        Uri address = request.getAddress();
+        connection.setAddress(address, TelecomManager.PRESENTATION_ALLOWED);
         Icon icon = CordovaCall.getIcon();
         if(icon != null) {
             StatusHints statusHints = new StatusHints((CharSequence)"", icon, new Bundle());
@@ -176,7 +229,13 @@ public class MyConnectionService extends ConnectionService {
             for (final CallbackContext callbackContext : callbackContexts) {
                 CordovaCall.getCordova().getThreadPool().execute(new Runnable() {
                     public void run() {
-                        PluginResult result = new PluginResult(PluginResult.Status.OK, "sendCall event called successfully");
+                        JSONObject info = new JSONObject();
+                        try {
+                            info.put("callId", address.getSchemeSpecificPart());
+                        } catch (JSONException e) {
+
+                        }
+                        PluginResult result = new PluginResult(PluginResult.Status.OK, info);
                         result.setKeepCallback(true);
                         callbackContext.sendPluginResult(result);
                     }
