@@ -50,6 +50,11 @@ public class MyConnectionService extends ConnectionService {
         }
     }
 
+    public static String getMessage(Context context, String name) {
+        Integer identifier = context.getResources().getIdentifier(name, "string", context.getPackageName());
+        return context.getString(identifier);
+    }
+
     @Override
     public Connection onCreateIncomingConnection(final PhoneAccountHandle connectionManagerPhoneAccount, final ConnectionRequest request) {
         final Connection connection = new Connection() {
@@ -144,7 +149,8 @@ public class MyConnectionService extends ConnectionService {
         final Context context = this.getApplicationContext();
 
         if (conn != null) {
-            Toast.makeText(context, "You can't make a call right now because you're already in a call", Toast.LENGTH_SHORT).show();
+            String message = MyConnectionService.getMessage(context, "cordova_call_already_calling");
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
             return null;
         }
 
@@ -202,7 +208,8 @@ public class MyConnectionService extends ConnectionService {
                     @Override
                     public void run() {
                         if (CordovaCall.getCordova() == null) {
-                            Toast.makeText(context, "Please open VoIPstudio first", Toast.LENGTH_SHORT).show();
+                            String message = MyConnectionService.getMessage(context, "cordova_call_app_not_running");
+                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
                             self.onDisconnect();
                             return;
                         }

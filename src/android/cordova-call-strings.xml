@@ -1,0 +1,5 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="cordova_call_app_not_running">Unable to make a call while VoIPstudio app is closed. Please start VoIPstudio app and try to make a call again.</string>
+    <string name="cordova_call_already_calling">You can\'t make a call right now because you\'re already in a call</string>
+</resources>

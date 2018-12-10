@@ -24,6 +24,7 @@
             </intent-filter>
         </service>
     </config-file>
+    <resource-file src="src/android/cordova-call-strings.xml" target="res/values/cordova-call-strings.xml" />
     <source-file src="src/android/CordovaCall.java" target-dir="src/com/dmarc/cordovacall" />
     <source-file src="src/android/MyConnectionService.java" target-dir="src/com/dmarc/cordovacall" />
   </platform>
