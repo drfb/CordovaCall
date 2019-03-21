@@ -74,7 +74,7 @@ public class CordovaCall extends CordovaPlugin {
           phoneAccount = new PhoneAccount.Builder(handle, appName)
                    .setCapabilities(PhoneAccount.CAPABILITY_CALL_PROVIDER)
                    .build();
-          tm.registerPhoneAccount(phoneAccount);          
+          tm.registerPhoneAccount(phoneAccount);
         }
         callbackContextMap.put("answer",new ArrayList<CallbackContext>());
         callbackContextMap.put("reject",new ArrayList<CallbackContext>());

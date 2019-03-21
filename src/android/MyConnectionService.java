@@ -61,6 +61,7 @@ public class MyConnectionService extends ConnectionService {
             @Override
             public void onAnswer() {
                 this.setActive();
+                this.setAudioModeIsVoip(true);
                 Intent intent = new Intent(CordovaCall.getCordova().getActivity().getApplicationContext(), CordovaCall.getCordova().getActivity().getClass());
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP);
                 CordovaCall.getCordova().getActivity().getApplicationContext().startActivity(intent);
@@ -158,6 +159,7 @@ public class MyConnectionService extends ConnectionService {
             @Override
             public void onAnswer() {
                 super.onAnswer();
+                this.setAudioModeIsVoip(true);
             }
 
             @Override
@@ -230,6 +232,7 @@ public class MyConnectionService extends ConnectionService {
             connection.setStatusHints(statusHints);
         }
         connection.setDialing();
+        connection.setAudioModeIsVoip(true);
         conn = connection;
         ArrayList<CallbackContext> callbackContexts = CordovaCall.getCallbackContexts().get("sendCall");
         if(callbackContexts != null) {
