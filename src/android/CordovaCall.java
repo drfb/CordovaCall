@@ -108,6 +108,16 @@ public class CordovaCall extends CordovaPlugin {
                 this.checkCallPermission();
             }
             return true;
+        } else if (action.equals("answerCall")) {
+            Connection conn = MyConnectionService.getConnection();
+            if(conn != null) {
+                if(conn.getState() == Connection.STATE_NEW) {
+                    conn.onAnswer();
+
+                    this.callbackContext.success("Call answered successfully");
+                }
+            }
+            return true;
         } else if (action.equals("sendCall")) {
             Connection conn = MyConnectionService.getConnection();
             if(conn != null) {

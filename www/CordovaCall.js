@@ -47,6 +47,10 @@ exports.receiveCall = function(from, id, success, error) {
     exec(success, error, "CordovaCall", "receiveCall", [from, id]);
 };
 
+exports.answerCall = function(success, error) {
+    exec(success, error, "CordovaCall", "answerCall", []);
+};
+
 exports.sendCall = function(to, id, success, error) {
     if(typeof id == "function") {
       error = success;

@@ -20,6 +20,7 @@ BOOL enableDTMF = NO;
     - (void)setRingtone:(CDVInvokedUrlCommand*)command;
     - (void)setIncludeInRecents:(CDVInvokedUrlCommand*)command;
     - (void)receiveCall:(CDVInvokedUrlCommand*)command;
+    - (void)answerCall:(CDVInvokedUrlCommand*)command;
     - (void)sendCall:(CDVInvokedUrlCommand*)command;
     - (void)connectCall:(CDVInvokedUrlCommand*)command;
     - (void)endCall:(CDVInvokedUrlCommand*)command;
@@ -213,6 +214,28 @@ BOOL enableDTMF = NO;
     }
 }
 
+- (void)answerCall:(CDVInvokedUrlCommand*)command
+{
+    CDVPluginResult* pluginResult = nil;
+    NSArray<CXCall *> *calls = self.callController.callObserver.calls;
+
+    if([calls count] == 1) {
+        CXAnswerCallAction *answerCallAction = [[CXAnswerCallAction alloc] initWithCallUUID:calls[0].UUID];
+        CXTransaction *transaction = [[CXTransaction alloc] initWithAction:answerCallAction];
+        [self.callController requestTransaction:transaction completion:^(NSError * _Nullable error) {
+            if (error == nil) {
+            } else {
+                NSLog(@"%@",[error localizedDescription]);
+            }
+        }];
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Call answered successfully"];
+    } else {
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"No call exists for you to connect"];
+    }
+
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+}
+
 - (void)sendCall:(CDVInvokedUrlCommand*)command
 {
     BOOL hasId = ![[command.arguments objectAtIndex:1] isEqual:[NSNull null]];
@@ -330,7 +353,7 @@ BOOL enableDTMF = NO;
     callUpdate.supportsUngrouping = NO;
     callUpdate.supportsHolding = NO;
     callUpdate.supportsDTMF = enableDTMF;
-    
+
     [self.provider reportCallWithUUID:action.callUUID updated:callUpdate];
     [action fulfill];
     NSDictionary *callData = @{@"callName":action.contactIdentifier, @"callId": action.handle.value, @"isVideo": action.video?@YES:@NO, @"message": @"sendCall event called successfully"};
