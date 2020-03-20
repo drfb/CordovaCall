@@ -22,6 +22,8 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.net.URLEncoder;
+import java.io.UnsupportedEncodingException;
 import android.graphics.drawable.Icon;
 import android.media.AudioManager;
 import android.util.Log;
@@ -272,9 +274,14 @@ public class CordovaCall extends CordovaPlugin {
     }
 
     private void sendCall() {
-        Uri uri = Uri.fromParts("tel", to, null);
+        String address = to;
+        try {
+            address = URLEncoder.encode(to, "UTF-8").replace("+", "%20");
+        } catch (UnsupportedEncodingException e) {}
+
+        Uri uri = Uri.fromParts("tel", address, null);
         Bundle callInfoBundle = new Bundle();
-        callInfoBundle.putString("to",to);
+        callInfoBundle.putString("to", address);
         Bundle callInfo = new Bundle();
         callInfo.putParcelable(TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS,callInfoBundle);
         callInfo.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle);

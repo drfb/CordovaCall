@@ -224,7 +224,9 @@ public class MyConnectionService extends ConnectionService {
               }
             }
         };
-        Uri address = request.getAddress();
+        Uri address = (request.getExtras().getString("to") != null)
+                    ? Uri.parse(request.getExtras().getString("to"))
+                    : request.getAddress();
         connection.setAddress(address, TelecomManager.PRESENTATION_ALLOWED);
         Icon icon = CordovaCall.getIcon();
         if(icon != null) {
