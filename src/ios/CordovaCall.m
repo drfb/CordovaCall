@@ -14,6 +14,7 @@ BOOL enableDTMF = NO;
 @interface CordovaCall : CDVPlugin <CXProviderDelegate>
     @property (nonatomic, strong) CXProvider *provider;
     @property (nonatomic, strong) CXCallController *callController;
+    @property (nonatomic, strong) NSMutableArray *callUuids;
     - (void)updateProviderConfig;
     - (void)setAppName:(CDVInvokedUrlCommand*)command;
     - (void)setIcon:(CDVInvokedUrlCommand*)command;
@@ -24,6 +25,7 @@ BOOL enableDTMF = NO;
     - (void)sendCall:(CDVInvokedUrlCommand*)command;
     - (void)connectCall:(CDVInvokedUrlCommand*)command;
     - (void)endCall:(CDVInvokedUrlCommand*)command;
+    - (void)cancelCall:(CDVInvokedUrlCommand*)command;
     - (void)registerEvent:(CDVInvokedUrlCommand*)command;
     - (void)mute:(CDVInvokedUrlCommand*)command;
     - (void)unmute:(CDVInvokedUrlCommand*)command;
@@ -54,6 +56,7 @@ BOOL enableDTMF = NO;
     self.provider = [[CXProvider alloc] initWithConfiguration:providerConfiguration];
     [self.provider setDelegate:self queue:nil];
     self.callController = [[CXCallController alloc] init];
+    self.callUuids = [[NSMutableArray alloc] init];
     //initialize callback dictionary
     callbackIds = [[NSMutableDictionary alloc]initWithCapacity:5];
     [callbackIds setObject:[NSMutableArray array] forKey:@"answer"];
@@ -66,6 +69,8 @@ BOOL enableDTMF = NO;
     [callbackIds setObject:[NSMutableArray array] forKey:@"speakerOn"];
     [callbackIds setObject:[NSMutableArray array] forKey:@"speakerOff"];
     [callbackIds setObject:[NSMutableArray array] forKey:@"DTMF"];
+    [callbackIds setObject:[NSMutableArray array] forKey:@"hold"];
+    [callbackIds setObject:[NSMutableArray array] forKey:@"unhold"];
     //allows user to make call from recents
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(receiveCallFromRecents:) name:@"RecentsCallNotification" object:nil];
     //detect Audio Route Changes to make speakerOn and speakerOff event handlers
@@ -172,12 +177,69 @@ BOOL enableDTMF = NO;
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
+- (CXCall*) findCall:(NSUUID*) callUUID
+{
+    NSPredicate *predicate = [NSPredicate predicateWithFormat:@"UUID == %@", callUUID];
+    NSArray<CXCall *> *allCalls = self.callController.callObserver.calls;
+    NSArray<CXCall *> *knownCalls = [allCalls filteredArrayUsingPredicate:predicate];
+
+    return knownCalls.count > 0 ? knownCalls[0] : nil;
+}
+
+- (void) saveCallUuid:(NSUUID*) callUUID withSipId:(NSString*) sipId {
+    NSLog(@"CordovaCall.saveCallUuid");
+
+    if ([self isHandlingCall:callUUID] && sipId == nil) {
+        return;
+    }
+
+    NSMutableDictionary *dict = [[NSMutableDictionary alloc] init];
+    [dict setObject: callUUID forKey:@"callUuid"];
+    [dict setObject: sipId == nil ? [NSNull null] : sipId forKey:@"sipId"];
+
+    [self.callUuids addObject:dict];
+}
+
+- (void) removeCallUuid:(NSUUID*) callUUID {
+    NSLog(@"CordovaCall.removeCallUuid");
+
+    NSPredicate *predicate = [NSPredicate predicateWithFormat:@"callUuid == %@", callUUID];
+    NSArray<NSMutableDictionary *> *hits = [self.callUuids filteredArrayUsingPredicate:predicate];
+
+    if ([hits count] > 0) {
+        [self.callUuids removeObject:hits[0]];
+    }
+}
+
+- (BOOL) isHandlingCall:(NSUUID*) callUUID {
+    NSPredicate *predicate = [NSPredicate predicateWithFormat:@"callUuid == %@", callUUID];
+    NSArray<NSMutableDictionary *> *hits = [self.callUuids filteredArrayUsingPredicate:predicate];
+
+    return [hits count] > 0;
+}
+
+- (NSUUID*) getLastCallUuid {
+    int count = [self.callUuids count];
+
+    return count == 0 ? nil : [self.callUuids[count - 1] objectForKey:@"callUuid"];
+}
+
+- (NSUUID*) geCallUuidForSipId: (NSString*) sipId {
+    NSPredicate *predicate = [NSPredicate predicateWithFormat:@"sipId == %@", sipId];
+    NSArray<NSMutableDictionary *> *hits = [self.callUuids filteredArrayUsingPredicate:predicate];
+
+    return [hits count] > 0 ? [hits[0] objectForKey:@"callUuid"] : nil;
+}
+
 - (void)receiveCall:(CDVInvokedUrlCommand*)command
 {
+    NSLog(@"CordovaCall.receiveCall");
+
     BOOL hasId = ![[command.arguments objectAtIndex:1] isEqual:[NSNull null]];
     CDVPluginResult* pluginResult = nil;
     NSString* callName = [command.arguments objectAtIndex:0];
     NSString* callId = hasId?[command.arguments objectAtIndex:1]:callName;
+    NSString* sipId = (NSString *)[command argumentAtIndex:2];
     NSUUID *callUUID = [[NSUUID alloc] init];
 
     if (hasId) {
@@ -193,8 +255,10 @@ BOOL enableDTMF = NO;
         callUpdate.localizedCallerName = callName;
         callUpdate.supportsGrouping = NO;
         callUpdate.supportsUngrouping = NO;
-        callUpdate.supportsHolding = NO;
+        callUpdate.supportsHolding = YES;
         callUpdate.supportsDTMF = enableDTMF;
+
+        [self saveCallUuid:callUUID withSipId:sipId];
 
         [self.provider reportNewIncomingCallWithUUID:callUUID update:callUpdate completion:^(NSError * _Nullable error) {
             if(error == nil) {
@@ -216,6 +280,8 @@ BOOL enableDTMF = NO;
 
 - (void)answerCall:(CDVInvokedUrlCommand*)command
 {
+    NSLog(@"CordovaCall.answerCall");
+
     CDVPluginResult* pluginResult = nil;
     NSArray<CXCall *> *calls = self.callController.callObserver.calls;
 
@@ -238,6 +304,8 @@ BOOL enableDTMF = NO;
 
 - (void)sendCall:(CDVInvokedUrlCommand*)command
 {
+    NSLog(@"CordovaCall.sendCall");
+
     BOOL hasId = ![[command.arguments objectAtIndex:1] isEqual:[NSNull null]];
     NSString* callName = [command.arguments objectAtIndex:0];
     NSString* callId = hasId?[command.arguments objectAtIndex:1]:callName;
@@ -283,12 +351,21 @@ BOOL enableDTMF = NO;
 
 - (void)endCall:(CDVInvokedUrlCommand*)command
 {
-    CDVPluginResult* pluginResult = nil;
-    NSArray<CXCall *> *calls = self.callController.callObserver.calls;
+    NSLog(@"CordovaCall.endCall");
 
-    if([calls count] == 1) {
-        //[self.provider reportCallWithUUID:calls[0].UUID endedAtDate:nil reason:CXCallEndedReasonRemoteEnded];
-        CXEndCallAction *endCallAction = [[CXEndCallAction alloc] initWithCallUUID:calls[0].UUID];
+    CDVPluginResult* pluginResult = nil;
+    int activeCalls = [self.callUuids count];
+
+    if(activeCalls == 0) {
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"No call exists for you to connect"];
+    } else {
+        // XXX: Try to close last call
+        //      This is scenario when application will reject call with busy
+        //      without user interaction with call kit
+        NSUUID *lastCallUUID = [self getLastCallUuid];
+        [self removeCallUuid:lastCallUUID];
+
+        CXEndCallAction *endCallAction = [[CXEndCallAction alloc] initWithCallUUID:lastCallUUID];
         CXTransaction *transaction = [[CXTransaction alloc] initWithAction:endCallAction];
         [self.callController requestTransaction:transaction completion:^(NSError * _Nullable error) {
             if (error == nil) {
@@ -297,11 +374,29 @@ BOOL enableDTMF = NO;
             }
         }];
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Call ended successfully"];
-    } else {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"No call exists for you to connect"];
     }
 
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+}
+/**
+ * This method is ment to be used when we want to close call kit without user interaction
+ */
+- (void)cancelCall:(CDVInvokedUrlCommand*)command
+{
+    NSLog(@"CordovaCall.cancelCall");
+
+    NSString* sipId = (NSString *)[command argumentAtIndex:0];
+    if (sipId == nil) {
+        return;
+    }
+
+    NSUUID* callUUID = [self geCallUuidForSipId:sipId];
+    if (callUUID == nil) {
+        return;
+    }
+
+    [self removeCallUuid:callUUID];
+    [self.provider reportCallWithUUID:callUUID endedAtDate:nil reason:CXCallEndedReasonRemoteEnded];
 }
 
 - (void)registerEvent:(CDVInvokedUrlCommand*)command;
@@ -344,6 +439,8 @@ BOOL enableDTMF = NO;
 
 - (void)provider:(CXProvider *)provider performStartCallAction:(CXStartCallAction *)action
 {
+    NSLog(@"CordovaCall.performStartCallAction");
+
     [self setupAudioSession];
     CXCallUpdate *callUpdate = [[CXCallUpdate alloc] init];
     callUpdate.remoteHandle = action.handle;
@@ -351,8 +448,10 @@ BOOL enableDTMF = NO;
     callUpdate.localizedCallerName = action.contactIdentifier;
     callUpdate.supportsGrouping = NO;
     callUpdate.supportsUngrouping = NO;
-    callUpdate.supportsHolding = NO;
+    callUpdate.supportsHolding = YES;
     callUpdate.supportsDTMF = enableDTMF;
+
+    [self saveCallUuid:action.callUUID withSipId:nil];
 
     [self.provider reportCallWithUUID:action.callUUID updated:callUpdate];
     [action fulfill];
@@ -395,31 +494,62 @@ BOOL enableDTMF = NO;
 
 - (void)provider:(CXProvider *)provider performEndCallAction:(CXEndCallAction *)action
 {
-    NSArray<CXCall *> *calls = self.callController.callObserver.calls;
-    if([calls count] == 1) {
-        if(calls[0].hasConnected) {
-            for (id callbackId in callbackIds[@"hangup"]) {
-                CDVPluginResult* pluginResult = nil;
-                pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"hangup event called successfully"];
-                [pluginResult setKeepCallbackAsBool:YES];
-                [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
-            }
-        } else {
-            for (id callbackId in callbackIds[@"reject"]) {
-                CDVPluginResult* pluginResult = nil;
-                pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"reject event called successfully"];
-                [pluginResult setKeepCallbackAsBool:YES];
-                [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
+    NSLog(@"CordovaCall.performEndCallAction");
+
+    CXCall *call = [self findCall:action.callUUID];
+
+    if (call != nil) {
+        if ([self isHandlingCall:action.callUUID]) {
+            if (call.hasConnected) {
+                for (id callbackId in callbackIds[@"hangup"]) {
+                    CDVPluginResult* pluginResult = nil;
+                    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"hangup event called successfully"];
+                    [pluginResult setKeepCallbackAsBool:YES];
+                    [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
+                }
+            } else {
+                for (id callbackId in callbackIds[@"reject"]) {
+                    CDVPluginResult* pluginResult = nil;
+                    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"reject event called successfully"];
+                    [pluginResult setKeepCallbackAsBool:YES];
+                    [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
+                }
             }
         }
     }
+
+    [self removeCallUuid:action.callUUID];
+
     monitorAudioRouteChange = NO;
+    [action fulfill];
+    //[action fail];
+}
+
+
+- (void)provider:(CXProvider *)provider performSetHeldCallAction:(CXSetHeldCallAction *)action
+{
+    NSLog(@"CordovaCall.performSetHeldCallAction");
+
+    CXCall *call = [self findCall:action.callUUID];
+    if (call != nil) {
+        NSString *callbackName = action.onHold ? @"hold" : @"unhold";
+
+        for (id callbackId in callbackIds[callbackName]) {
+            CDVPluginResult* pluginResult = nil;
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString: [NSString stringWithFormat:@"%@ event called successfully", callbackName]];
+            [pluginResult setKeepCallbackAsBool:YES];
+            [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
+        }
+    }
+
     [action fulfill];
     //[action fail];
 }
 
 - (void)provider:(CXProvider *)provider performSetMutedCallAction:(CXSetMutedCallAction *)action
 {
+    NSLog(@"CordovaCall.performSetMutedCallAction");
+
     [action fulfill];
     BOOL isMuted = action.muted;
     for (id callbackId in callbackIds[isMuted?@"mute":@"unmute"]) {
