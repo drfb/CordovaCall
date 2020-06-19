@@ -15,6 +15,7 @@ import android.telecom.DisconnectCause;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.StatusHints;
 import android.telecom.TelecomManager;
+import android.telephony.PhoneNumberUtils;
 import android.os.Handler;
 import android.net.Uri;
 import java.util.ArrayList;
@@ -55,6 +56,13 @@ public class MyConnectionService extends ConnectionService {
         return context.getString(identifier);
     }
 
+    private void setCallerName(Connection connection, String name) {
+        connection.setAddress(Uri.parse(name), TelecomManager.PRESENTATION_ALLOWED);
+        if (!PhoneNumberUtils.isGlobalPhoneNumber(name)) {
+            connection.setCallerDisplayName(name, TelecomManager.PRESENTATION_ALLOWED);
+        }
+    }
+
     @Override
     public Connection onCreateIncomingConnection(final PhoneAccountHandle connectionManagerPhoneAccount, final ConnectionRequest request) {
         final Connection connection = new Connection() {
@@ -87,7 +95,14 @@ public class MyConnectionService extends ConnectionService {
                 for (final CallbackContext callbackContext : callbackContexts) {
                     CordovaCall.getCordova().getThreadPool().execute(new Runnable() {
                         public void run() {
-                            PluginResult result = new PluginResult(PluginResult.Status.OK, "reject event called successfully");
+                            JSONObject info = new JSONObject();
+                            try {
+                                info.put("reason", request.getExtras().getBoolean("isBusy", false) ? "busy" : "decline");
+                                info.put("message", "reject event called successfully");
+                            } catch (JSONException e) {
+
+                            }
+                            PluginResult result = new PluginResult(PluginResult.Status.OK, info);
                             result.setKeepCallback(true);
                             callbackContext.sendPluginResult(result);
                         }
@@ -125,7 +140,9 @@ public class MyConnectionService extends ConnectionService {
                 }
             }
         };
-        connection.setAddress(Uri.parse(request.getExtras().getString("from")), TelecomManager.PRESENTATION_ALLOWED);
+
+        this.setCallerName(connection, request.getExtras().getString("from"));
+
         Icon icon = CordovaCall.getIcon();
         if(icon != null) {
             StatusHints statusHints = new StatusHints((CharSequence)"", icon, new Bundle());
@@ -224,10 +241,9 @@ public class MyConnectionService extends ConnectionService {
               }
             }
         };
-        Uri address = (request.getExtras().getString("to") != null)
-                    ? Uri.parse(request.getExtras().getString("to"))
-                    : request.getAddress();
-        connection.setAddress(address, TelecomManager.PRESENTATION_ALLOWED);
+
+        this.setCallerName(connection, request.getExtras().getString("to"));
+
         Icon icon = CordovaCall.getIcon();
         if(icon != null) {
             StatusHints statusHints = new StatusHints((CharSequence)"", icon, new Bundle());
@@ -243,7 +259,8 @@ public class MyConnectionService extends ConnectionService {
                     public void run() {
                         JSONObject info = new JSONObject();
                         try {
-                            info.put("callId", address.getSchemeSpecificPart());
+                            info.put("callId", request.getAddress().getSchemeSpecificPart());
+                            info.put("message", "sendCall event called successfully");
                         } catch (JSONException e) {
 
                         }

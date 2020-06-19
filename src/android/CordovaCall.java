@@ -268,9 +268,13 @@ public class CordovaCall extends CordovaPlugin {
     private void receiveCall() {
         Bundle callInfo = new Bundle();
         callInfo.putString("from",from);
+        callInfo.putBoolean("isBusy", this.tm.isInCall());
         tm.addNewIncomingCall(handle, callInfo);
         permissionCounter = 0;
         this.callbackContext.success("Incoming call successful");
+
+        this.bringAppToFront();
+        this.tm.showInCallScreen(false);
     }
 
     private void sendCall() {
@@ -279,16 +283,22 @@ public class CordovaCall extends CordovaPlugin {
             address = URLEncoder.encode(to, "UTF-8").replace("+", "%20");
         } catch (UnsupportedEncodingException e) {}
 
-        Uri uri = Uri.fromParts("tel", address, null);
         Bundle callInfoBundle = new Bundle();
-        callInfoBundle.putString("to", address);
+        callInfoBundle.putString("to", to);
         Bundle callInfo = new Bundle();
         callInfo.putParcelable(TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS,callInfoBundle);
         callInfo.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle);
         callInfo.putBoolean(TelecomManager.EXTRA_START_CALL_WITH_VIDEO_STATE, true);
-        tm.placeCall(uri, callInfo);
+        tm.placeCall(Uri.fromParts("tel", address, null), callInfo);
         permissionCounter = 0;
         this.callbackContext.success("Outgoing call successful");
+    }
+
+    private void bringAppToFront() {
+        Intent intent = new Intent(this.cordova.getActivity().getApplicationContext(), this.cordova.getActivity().getClass());
+        // Intent.FLAG_ACTIVITY_REORDER_TO_FRONT Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT | Intent.FLAG_FROM_BACKGROUND);
+        this.cordova.getActivity().getApplicationContext().startActivity(intent);
     }
 
     private void mute() {

@@ -508,9 +508,11 @@ BOOL enableDTMF = NO;
                     [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
                 }
             } else {
+                NSArray<CXCall *> *calls = self.callController.callObserver.calls;
+                NSDictionary *info = @{@"reason": calls.count > 1 ? @"busy" : @"decline", @"message": @"reject event called successfully"};
                 for (id callbackId in callbackIds[@"reject"]) {
                     CDVPluginResult* pluginResult = nil;
-                    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"reject event called successfully"];
+                    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:info];
                     [pluginResult setKeepCallbackAsBool:YES];
                     [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
                 }
